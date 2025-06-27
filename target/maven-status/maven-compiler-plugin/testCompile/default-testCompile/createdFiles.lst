@@ -1,0 +1,5 @@
+com\ejemplo\base\BasePage.class
+com\ejemplo\tests\LoginTest.class
+com\ejemplo\pages\DashboardPage.class
+com\ejemplo\pages\LoginPage.class
+com\ejemplo\base\BaseTest.class

@@ -1,0 +1,70 @@
+name: Automatización de Pruebas UI
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-run-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del Código
+        uses: actions/checkout@v4
+
+      - name: Configurar Java Development Kit (JDK)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Levantar Selenium Grid con Docker Compose
+        run: |
+          echo "Levantando Selenium..."
+          docker compose up -d
+          echo "Todos los servicios Docker levantados."
+        working-directory: ./
+
+      - name: Esperar a que Selenium Grid esté listo
+        run: |
+          echo "Esperando http://localhost:4444/wd/hub/status hasta que esté listo..."
+          timeout 60 bash -c 'until curl -s http://localhost:4444/wd/hub/status | jq -r ".value.ready" | grep -q "true"; do sleep 5; done' || \
+          { echo "Selenium no está listo después de varios intentos."; exit 1; }
+          echo "Selenium está listo."
+        working-directory: ./
+
+      - name: Compilar Proyecto Maven
+        run: mvn clean install
+        working-directory: ./
+
+      - name: Ejecutar Pruebas UI (Smoke Tests)
+        run: mvn test -Dgroups=smoke -Dselenium.grid.url=http://localhost:4444/wd/hub -Dbrowser.type=chrome
+        working-directory: ./
+
+      - name: Ejecutar Pruebas UI (Regression Tests)
+        run: mvn test -Dgroups=regression -Dselenium.grid.url=http://localhost:4444/wd/hub -Dbrowser.type=chrome
+        working-directory: ./
+
+      - name: Subir Reportes de Tests Maven
+        uses: actions/upload-artifact@v4
+        if: always() 
+        with:
+          name: surefire-reports
+          path: target/surefire-reports
+
+      - name: Limpiar Servicios Docker
+        if: always() 
+        run: |
+          echo "Deteniendo servicios Docker..."
+          docker compose down
+        working-directory: ./
+
+      - name: Finalizar Job y Reportar Estado
+        if: always()
+        run: |
+          if ${{ job.status == 'success' }}; then
+            echo "Las pruebas UI se completaron exitosamente."
+          else
+            echo "Las pruebas UI fallaron."
+            exit 1
+          fi
